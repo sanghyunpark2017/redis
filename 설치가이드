@@ -1,1 +1,42 @@
 # redis
+
+
+
+#https://brunch.co.kr/@daniellim/31
+
+
+#계정생성
+adduser redis
+
+#open file 개수 limit  변경
+vi /etc/security/limits.conf redis soft nofile 65535 redis hard nofile 65535
+
+#swap/최소 사용
+vi /etc/sysctl.conf
+vm.swappiness=1
+
+#swap/메모리를 다 사용해도 충분한 메모리가 있는 것처럼 사용
+vi /etc/sysctl.conf
+vm.overcommit_memory=1
+
+
+shutdown -r now
+
+
+#네트워크 연결 개수 설정
+sysctl -w net.core.somaxconn=65535
+
+vi /etc/rc.local
+sysctl -w net.core.somaxconn=65535
+
+#system hang 막기위해 thp사용안하기
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+
+vi /etc/rc.local
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+
+#
+
+
+
+

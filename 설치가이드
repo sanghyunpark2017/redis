@@ -1,3 +1,128 @@
+
+############################################
+# REDIS 공식사이트 - 설치
+############################################
+
+#툴설치
+yum install -y gcc-c++ wget 
+
+#소스다운로드(2018년 7월 현재 stable 버전 4.0, https://redis.io/download)
+mkdir -p /app/redis
+cd /app/redis
+
+wget http://download.redis.io/releases/redis-stable.tar.gz
+tar -xvf redis-stable.tar.gz
+cd redis-stable
+
+make
+
+cp redis.conf redis.conf.org
+
+#실행
+cd /app/redis/redis-stable/src
+./redis-server
+exit
+
+#패러미터 조정
+cat << EOF >> /etc/sysctl.conf
+vm.overcommit_memory = 1
+EOF
+
+cat << EOF >>  /etc/rc.local
+sysctl -w net.core.somaxconn=65535
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+EOF
+
+chmod +x /etc/rc.d/rc.local
+
+shutdown -r now
+
+#재실행
+/app/redis/redis-stable/src/redis-server /app/redis/redis-stable/redis.conf
+
+#클라이언트 테스트(터미널 추가)
+cd /app/redis/redis-stable/src
+./redis-cli
+set foo bar
+get foo
+
+############################################
+# 설정(master 3대 모두)
+############################################
+
+systemctl stop firewalld
+systemctl disable firewalld
+
+#클러스터 설정
+cat << EOF > /root/redis-cluster.conf
+bind 127.0.0.1 10.10.64.41
+logfile "/var/log/redis.log"
+daemonize yes
+port 6379
+cluster-enabled yes
+cluster-config-file nodes.conf
+cluster-node-timeout 5000
+appendonly yes
+EOF
+
+#redis 실행
+/app/redis/redis-stable/src/redis-server /root/redis-cluster.conf
+
+############################################
+# 설정(master 1번만)
+############################################
+
+#redis cluster 생성/조인
+cd /app/redis/redis-stable/src
+./redis-cli -p 6379 CLUSTER MEET 10.10.64.42 6379
+./redis-cli -p 6379 CLUSTER MEET 10.10.64.43 6379
+
+
+
+cd /app/redis/redis-stable/src
+./redis-cli -p 6379 cluster nodes | grep myself
+./redis-trib.rb check 127.0.0.1:6379
+
+#redis-trib.rb 스크립트 실행을 위해 ruby 등 설치했으나 오류 발생
+#./redis-trib.rb check 127.0.0.1:6379 >> 오류
+yum install -y gem ruby ruby-devel ruby gems redis-stat rpm-build
+
+
+############################# >> redis.trib.rb를 쓰려면 gem install 하라고 한다ㅜ.ㅜ;;;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#master 1번
+cd /app/redis/redis-stable/src
+#./redis-trib.rb create --replicas 1 127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 127.0.0.1:7003 127.0.0.1:7004 127.0.0.1:7005
+./redis-trib.rb create --replicas 1 10.10.64.41:6379 10.10.64.42:6379 10.10.64.43:6379
+
+
+
+
+
+
+
+
+
 # redis
 
 
@@ -18,6 +143,13 @@ vm.swappiness=1
 #swap/메모리를 다 사용해도 충분한 메모리가 있는 것처럼 사용
 vi /etc/sysctl.conf
 vm.overcommit_memory=1
+
+
+cat << EOF >> /etc/security/limits.conf
+*          soft    nofile          65536
+*          hard    nofile          65536
+EOF
+
 
 
 shutdown -r now

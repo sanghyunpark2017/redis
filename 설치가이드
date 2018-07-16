@@ -16,14 +16,22 @@ cd redis-stable
 
 make
 
+
+
+
+#기본 설정파일 백업
 cp redis.conf redis.conf.org
 
-#실행
-cd /app/redis/redis-stable/src
-./redis-server
-exit
+#설치 되었는지 확인(PASS 이 떄는 패러미터 설정오류 발생함)
+#/app/redis/redis-stable/src/redis-server
+#CTRL+c
 
 #패러미터 조정
+cat << EOF >> /etc/security/limits.conf
+*          soft    nofile          65536
+*          hard    nofile          65536
+EOF
+
 cat << EOF >> /etc/sysctl.conf
 vm.overcommit_memory = 1
 EOF
@@ -35,49 +43,122 @@ EOF
 
 chmod +x /etc/rc.d/rc.local
 
+#재부팅하여 설정반영
 shutdown -r now
 
-#재실행
+#재실행(이 떄는 패러미터 설정 오류 없음)
 /app/redis/redis-stable/src/redis-server /app/redis/redis-stable/redis.conf
+CTRL+c
 
-#클라이언트 테스트(터미널 추가)
-cd /app/redis/redis-stable/src
-./redis-cli
-set foo bar
-get foo
 
 ############################################
 # 설정(master 3대 모두)
 ############################################
 
+#나중에 방화벽 살릴 것
 systemctl stop firewalld
 systemctl disable firewalld
 
-#클러스터 설정
-cat << EOF > /root/redis-cluster.conf
-bind 127.0.0.1 10.10.64.41
-logfile "/var/log/redis.log"
-daemonize yes
-port 6379
+################### redis-trib.rb 유틸리티 쓰기 위한 gem 설치 ###################
+
+
+#Install RVM
+gpg2 --keyserver hkp://keys.gnupg.net --recv-keys D39DC0E3
+curl -L get.rvm.io | bash -s stable
+touch /etc/profile.d/rvm.sh
+
+#rvm 실행파일 위치 검색(PASS)
+#find . -name rvm*
+
+#최신 stable 버전 확인(2018년 7월 현재 stable 버전 2.5.1 )
+#https://www.ruby-lang.org/en/downloads/
+
+#다운로드&설치
+/usr/local/rvm/bin/rvm install 2.5.1
+
+#버전지정(에러발생)
+#/usr/local/rvm/bin/rvm use 2.5.1 --default
+
+#버전지정(OK)
+/usr/local/rvm/bin/rvm list
+/usr/local/rvm/bin/rvm alias create default ruby-2.5.1
+
+#터미널을 종료하고 다시 로그인
+exit
+
+
+#버전확인
+ruby --version
+
+###############################################################################################
+
+
+#gem으로 redis 설치 
+#centos7은 ruby 버전이 2.2.2로 맞지 않는다고 나오니 위 설치 진행함
+gem install redis
+
+
+#클러스터 설정용 config 파일생성
+##각 MSTER서버의 IP주소에 맞게 BIND 주소 수정
+mkdir -p /app/redis/redis-stable/src/cluster
+cd /app/redis/redis-stable/src/cluster
+
+cat << EOF > ./redis.conf
+bind 10.10.64.41
+port 7000
 cluster-enabled yes
 cluster-config-file nodes.conf
 cluster-node-timeout 5000
 appendonly yes
 EOF
+vi ./redis.conf
 
-#redis 실행
+cd /app/redis/redis-stable/src/cluster
+../redis-server ./redis.conf
+
+ 
+
+#redis 데몬으로 실행
 /app/redis/redis-stable/src/redis-server /root/redis-cluster.conf
+ps -ef | grep redis
+
+
 
 ############################################
 # 설정(master 1번만)
 ############################################
 
+
+#master 1번에서 실행(최소 6개 노드 지정이 되어야 함)
+cd /app/redis/redis-stable/src
+./redis-trib.rb create --replicas 1 10.10.64.41:7000 10.10.64.42:7000 10.10.64.43:7000 10.10.64.44:7000 10.10.64.45:7000 10.10.64.46:7000
+
+
+http://redisgate.kr/redis/cluster/redis-trib.php
+
+
+
+
+>>>> 수분 동안 멍때릭 진행되지 않음
+>>>> 혹시 master 1번에서 모든 서버로 ssh key 설정??
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #redis cluster 생성/조인
 cd /app/redis/redis-stable/src
 ./redis-cli -p 6379 CLUSTER MEET 10.10.64.42 6379
 ./redis-cli -p 6379 CLUSTER MEET 10.10.64.43 6379
-
-
 
 cd /app/redis/redis-stable/src
 ./redis-cli -p 6379 cluster nodes | grep myself
@@ -91,8 +172,11 @@ yum install -y gem ruby ruby-devel ruby gems redis-stat rpm-build
 ############################# >> redis.trib.rb를 쓰려면 gem install 하라고 한다ㅜ.ㅜ;;;
 
 
+yum install -y epel-release
+yum install -y gem ruby ruby-devel ruby gems redis-stat rpm-build
 
 
+gem install redis
 
 
 

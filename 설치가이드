@@ -16,9 +16,6 @@ cd redis-stable
 
 make
 
-
-
-
 #기본 설정파일 백업
 cp redis.conf redis.conf.org
 
@@ -98,8 +95,13 @@ ruby --version
 gem install redis
 
 
+#여기서 스냅샷함
+#여기서 데몬으로 변경할 것
+
+
 #클러스터 설정용 config 파일생성
 ##각 MSTER서버의 IP주소에 맞게 BIND 주소 수정
+#BIND 주소에 loopback IP는 반드시 제거할 것 (자동 조인 안됨)
 mkdir -p /app/redis/redis-stable/src/cluster
 cd /app/redis/redis-stable/src/cluster
 
@@ -133,8 +135,11 @@ ps -ef | grep redis
 cd /app/redis/redis-stable/src
 ./redis-trib.rb create --replicas 1 10.10.64.41:7000 10.10.64.42:7000 10.10.64.43:7000 10.10.64.44:7000 10.10.64.45:7000 10.10.64.46:7000
 
+#참고 http://redisgate.kr/redis/cluster/redis-trib.php
 
-http://redisgate.kr/redis/cluster/redis-trib.php
+#그럼 이제 각 호스트서버에 누구가 slave로 되었는지 나오게 됨
+#
+
 
 
 

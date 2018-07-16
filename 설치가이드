@@ -1,9 +1,9 @@
 # redis
 
 
-
+######################################
 #https://brunch.co.kr/@daniellim/31
-
+######################################
 
 #계정생성
 adduser redis
@@ -35,7 +35,53 @@ echo never > /sys/kernel/mm/transparent_hugepage/enabled
 vi /etc/rc.local
 echo never > /sys/kernel/mm/transparent_hugepage/enabled
 
-#
+######################################
+http://utk-unm.blogspot.com/2016/10/redis-cluster-centos-721511-64-bit.html
+######################################
+
+#redis 다운로드 페이지
+#http://download.redis.io/releases/
+
+mkdir build && cd build
+wget http://download.redis.io/releases/redis-3.0.0.tar.gz
+tar -xvfz redis-3.0.0.tar.gz
+cd redis-3.0.0/
+ 아래의 패키지들을 yum을 이용해서 설치
+ yum install gem ruby ruby-devel ruby gems redis-stat rpm-build
+ 
+############################################################################
+http://the-earth.tistory.com/entry/redis?category=450027
+############################################################################
+
+
+
+http://redis.io/topics/cluster-tutorial
+
+#port
+-TCP 6379 : 클라이언트 통신
+-TCP 16379 : 노드간 통신 (+10000)
+
+#hash slot
+CRC16을 사용하여 16384개의 hash slot을 계산한다.
+
+ex)
+nodeA : 0~550
+nodeB : 5501~11000
+nodeC : 11001~16384
+
+#튜토리얼 강력 추천
+master 3대, slave 3대
+
+#서버구성
+
+
+
+
+
+
+
+
+
 
 
 

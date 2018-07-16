@@ -108,6 +108,9 @@ cd /app/redis/redis-stable/src/cluster
 cat << EOF > ./redis.conf
 bind 10.10.64.41
 port 7000
+daemonize yes
+loglevel verbose
+logfile "/var/log/redis.log"
 cluster-enabled yes
 cluster-config-file nodes.conf
 cluster-node-timeout 5000
@@ -116,7 +119,9 @@ EOF
 vi ./redis.conf
 
 cd /app/redis/redis-stable/src/cluster
-../redis-server ./redis.conf --daemonize yes
+../redis-server ./redis.conf
+
+#../redis-server ./redis.conf --daemonize yes
 
  
 
@@ -142,45 +147,92 @@ cd /app/redis/redis-stable/src
 
 
 
+############################################
+# 명령어
+############################################
 
- 
-   1  require './cluster'
-   2
-   3  if ARGV.length != 2
-   4      startup_nodes = [
-   5          {:host => "127.0.0.1", :port => 7000},
-   6          {:host => "127.0.0.1", :port => 7001}
-   7      ]
-   8  else
-   9      startup_nodes = [
-  10          {:host => ARGV[0], :port => ARGV[1].to_i}
-  11      ]
-  12  end
-  13
-  14  rc = RedisCluster.new(startup_nodes,32,:timeout => 0.1)
-  15
-  16  last = false
-  17
-  18  while not last
-  19      begin
-  20          last = rc.get("__last__")
-  21          last = 0 if !last
-  22      rescue => e
-  23          puts "error #{e.to_s}"
-  24          sleep 1
-  25      end
-  26  end
-  27
-  28  ((last.to_i+1)..1000000000).each{|x|
-  29      begin
-  30          rc.set("foo#{x}",x)
-  31          puts rc.get("foo#{x}")
-  32          rc.set("__last__",x)
-  33      rescue => e
-  34          puts "error #{e.to_s}"
-  35      end
-  36      sleep 0.1
-  37  }
+
+
+#레디스종료
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.46 -p 7000
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.45 -p 7000
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.44 -p 7000
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.43 -p 7000
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.42 -p 7000
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.41 -p 7000
+
+
+
+#클러스터 조회
+cd /app/redis/redis-stable/src
+./redis-cli -h 10.10.64.41 -p 7000
+
+cluster info
+cluster nodes
+
+
+
+#클러스터 생성 후 클러스터 노드 확인
+cd /app/redis/redis-stable/src
+./redis-cli -h 10.10.64.41 -p 7000 cluster nodes
+
+./redis-cli -h 10.10.64.42 -p 7000 cluster nodes
+
+./redis-cli -h 10.10.64.43 -p 7000 cluster nodes
+
+./redis-cli -h 10.10.64.44 -p 7000 cluster nodes
+
+./redis-cli -h 10.10.64.45 -p 7000 cluster nodes
+
+./redis-cli -h 10.10.64.46 -p 7000 cluster nodes
+
+
+#클러스터정보조회
+
+./redis-trib.rb info 10.10.64.41:7000
+./redis-trib.rb info 10.10.64.42:7000
+./redis-trib.rb info 10.10.64.43:7000
+./redis-trib.rb info 10.10.64.44:7000
+./redis-trib.rb info 10.10.64.45:7000
+./redis-trib.rb info 10.10.64.46:7000
+
+
+#클러스터 체크
+./redis-trib.rb check 10.10.64.41:7000
+
+#dbsize
+./redis-trib.rb call 10.10.64.41:7000 dbsize
+
+
+#키 초기화
+./redis-trib.rb call 10.10.64.41:7000 flushall
+
+
+./redis-trib.rb info 10.10.64.41:7000
+
+
+
+
+
+#
+./redis-cli -c -h 10.10.64.41 -p 7000
+
+set foo bar
+
+
+set hello world
+
+get foo
+
+get hello
+
+keys *
+
+
+
+
+
+
 
 
 

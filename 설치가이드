@@ -43,6 +43,11 @@ chmod +x /etc/rc.d/rc.local
 #재부팅하여 설정반영
 shutdown -r now
 
+#tcp backlog 확인
+sysctl net.core.somaxconn
+
+
+
 #재실행(이 떄는 패러미터 설정 오류 없음)
 /app/redis/redis-stable/src/redis-server /app/redis/redis-stable/redis.conf
 CTRL+c
@@ -118,16 +123,6 @@ appendonly yes
 EOF
 vi ./redis.conf
 
-cd /app/redis/redis-stable/src/cluster
-../redis-server ./redis.conf
-
-#../redis-server ./redis.conf --daemonize yes
-
- 
-
-#redis 데몬으로 실행
-/app/redis/redis-stable/src/redis-server /root/redis-cluster.conf
-ps -ef | grep redis
 
 
 
@@ -151,9 +146,38 @@ cd /app/redis/redis-stable/src
 # 명령어
 ############################################
 
+#redis 실행
+/app/redis/redis-stable/src/cluster/redis-server ./redis.conf
 
 
-#레디스종료
+#콘솔실행
+/app/redis/redis-stable/src/redis-cli -c -h 10.10.64.41 -p 7000
+/app/redis/redis-stable/src/redis-cli -c -h 10.10.64.42 -p 7000
+/app/redis/redis-stable/src/redis-cli -c -h 10.10.64.43 -p 7000
+/app/redis/redis-stable/src/redis-cli -c -h 10.10.64.44 -p 7000
+/app/redis/redis-stable/src/redis-cli -c -h 10.10.64.45 -p 7000
+/app/redis/redis-stable/src/redis-cli -c -h 10.10.64.46 -p 7000
+
+#콘솔명령어
+cluster info
+cluster nodes
+config get *
+monitor
+
+
+#Direct 콘솔명령어
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.41 -p 7000 cluster info
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.42 -p 7000 cluster info
+...
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.41 -p 7000 cluster nodes
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.42 -p 7000 cluster nodes
+...
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.41 -p 7000 monitor
+/app/redis/redis-stable/src/redis-cli -h 10.10.64.42 -p 7000 monitor
+...
+
+
+#redis 종료
 /app/redis/redis-stable/src/redis-cli -h 10.10.64.46 -p 7000
 /app/redis/redis-stable/src/redis-cli -h 10.10.64.45 -p 7000
 /app/redis/redis-stable/src/redis-cli -h 10.10.64.44 -p 7000
@@ -161,30 +185,6 @@ cd /app/redis/redis-stable/src
 /app/redis/redis-stable/src/redis-cli -h 10.10.64.42 -p 7000
 /app/redis/redis-stable/src/redis-cli -h 10.10.64.41 -p 7000
 
-
-
-#클러스터 조회
-cd /app/redis/redis-stable/src
-./redis-cli -h 10.10.64.41 -p 7000
-
-cluster info
-cluster nodes
-
-
-
-#클러스터 생성 후 클러스터 노드 확인
-cd /app/redis/redis-stable/src
-./redis-cli -h 10.10.64.41 -p 7000 cluster nodes
-
-./redis-cli -h 10.10.64.42 -p 7000 cluster nodes
-
-./redis-cli -h 10.10.64.43 -p 7000 cluster nodes
-
-./redis-cli -h 10.10.64.44 -p 7000 cluster nodes
-
-./redis-cli -h 10.10.64.45 -p 7000 cluster nodes
-
-./redis-cli -h 10.10.64.46 -p 7000 cluster nodes
 
 
 #클러스터정보조회

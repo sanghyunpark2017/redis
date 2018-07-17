@@ -147,7 +147,7 @@ cd /app/redis/redis-stable/src
 ############################################
 
 #redis 실행
-/app/redis/redis-stable/src/cluster/redis-server ./redis.conf
+/app/redis/redis-stable/src/redis-server /app/redis/redis-stable/src/cluster/redis.conf
 
 
 #콘솔실행

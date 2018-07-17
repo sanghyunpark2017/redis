@@ -230,6 +230,29 @@ keys *
 
 
 
+############################################
+# 참고 사이트
+############################################
+
+#REDIS MASTER/SLAVE와 센티널 (2015년 5월, redis 3.0 버전)
+http://crystalcube.co.kr/176?category=665742
+
+#redis 옵션정보(2017년 2월)
+http://jamcode.tistory.com/25
+
+#redis 천만번 째 오류 발생 사례
+http://yongho1037.tistory.com/699
+
+#redis 설정(2017년 12월)
+http://bstar36.tistory.com/349
+
+#설정
+https://lahuman.github.io/redis-cluster-install/
+
+
+
+
+
 
 
 

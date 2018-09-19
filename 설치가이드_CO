@@ -2,7 +2,7 @@
 # Note
 #############################################
 -마스터와 슬레이드 수동으로 만듬
-
+-/var/log/redis.log 파일 순환 필요
 
 
 ############################################
@@ -146,6 +146,8 @@ gem install redis
 >>protected-mode no --> yes 수정
 >>port 7000 --> 6379 수정
 >>pidfile /var/run/redis_7000.pid --> redis_6379.pid 수정
+>>logleve verbose --> notice 수정
+>>logfile "/var/log/redis.log" --> ""을 수정
 >>cluster-enabled yes --> 행추가
 >>cluster-config-file /app/redis/redis-stable/conf/nodes-7000.conf --> 행추가
 >>cluster-node-timeout 15000 --> 행추가
@@ -167,8 +169,10 @@ tcp-keepalive 300
 daemonize no
 supervised no
 pidfile /var/run/redis_7000.pid
-loglevel notice
-logfile ""
+#loglevel verbose
+#logfile ""
+loglevel verbose
+logfile "/var/log/redis.log"
 databases 16
 always-show-logo yes
 save 900 1
@@ -235,6 +239,11 @@ cat << EOF >> /root/.bash_profile
 alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
 alias rstop='redis-cli -p 7000 shutdown'
 alias rconsole='redis-cli -c -p 7000'
+EOF
+
+
+cat << EOF >> /root/.bash_profile
+alias rlconsole='redis-cli -p 7000'
 EOF
 
 ------------------------------------------------------------------------------------------------------------------
@@ -391,64 +400,180 @@ c16e82242967966af117059586457eed8e31e3d6 10.10.64.55:7000@17000 slave 2542bbfa9f
 2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 10.10.64.52:7000@17000 myself,master - 0 1537322098000 2 connected 5461-10922
 
 
+############################################
+# Redis 데이터분배 테스트
+#############################################
+#모든 서버 stop
+rstop
+
+#master 1번 서버는 창을 2개 열고 각각 실행
+tail -f /var/log/redis.log
+
+rconsole
+info keyspace
+
+#모든 서버 start
+rstart
 
 
+1. key/value 테스트 데이터(1,048,576개, 28GB) 다운로드
+cd /root
+wget http://10.10.63.63:8089/redis-input-test.txt.bin
+wc -l /root/redis-input-test.txt.bin
+
+2. 1백만개 밀어 넣기 (약 25초 소요)
+cat /root/redis-input-test.txt.bin | redis-cli -p 7000 >> /root/redis-input.out  
+
+!!! 349473에서 멈춤
 
 
+3.확인해 보면 다른 마스터 서버로도 생성되는 것을 알 수 있음
+more  /root/redis-input.out  
+
+=================================================================================
+MOVED 9189 10.10.64.52:7000
+
+OK
+OK
+MOVED 13120 10.10.64.53:7000  --> 다른 마스터서버에 생성됨을 알 수 있음
+
+MOVED 9057 10.10.64.52:7000
+
+OK
+OK
+MOVED 13004 10.10.64.53:7000
+
+MOVED 8941 10.10.64.52:7000
+
+MOVED 5850 10.10.64.52:7000
+...
+..
+=================================================================================
+
+4.마스터 3대 각각 "info keyspace"를 확인해 보니 1번 master만 저장되어 있음
+>> 명령어를 실행한 1번 마스터만 349,473 개에 멈춘 것을 알 수 있음
+>> 이는 명령어 중 "redis-cli -p 7000" 클러스터를 가리키는 "-c"가 누락되어 발생한 것임
+
+5.1번 마스터에 모든 키를 지우고
+rlconsole
+flushall
+info keyspace
+
+6.클러스터에 "-c"에 넣음
+cat /root/redis-input-test.txt.bin | redis-cli -c -p 7000 >> /root/redis-input.out  
+
+7.마스터 3대에 골고루 들어갔음
+#1,048,575개 넣어서 master 3대 합 1,048,576이 나옴
+#slave도 쌍이 되는 master 서버와 동일한 숫자가 나옴
+master1 : 349473
+master2 : 349632
+master3 : 349471
+=> 1,048,576
+
+8.마스터 1번에서 검색하고
+keys *999999
+>1) "key999999"
+>2) "key1999999"
+>(이하 생략)
+
+9.마스터 1번이 가지고 있지 않은 키를 검색하면 그 키를 가지고 있는 마스터에서 가져옴
+get key999998
+-> Redirected to slot [6453] located at 10.10.64.52:7000
+"value999998"
+
+-- 테스트 끝 --
+
+10.마스터서버 3대 모두 flush, slave 서버는 쓰기 권한 없어서 실패
+flushall
 
 
+############################################
+# Redis FailOver 테스트
+#############################################
+
+#현재 클러스터 노드 상태 (클러스터 모드이므로 아무 서버나 동일 결과)
+echo "cluster nodes" | redis-cli -c -p 7000
+
+#시나리오1. role 전환 테스트 (master1과 slave1)
+-master1 서비스를 중지하면 이 서버와 매핑된 slave1서버가 slave -> master
+-master1 서비스를 살리면 slave1은  master 상태 유지하고, master1이 master(직전상태) -> slave 상태로 올라옴
+-slave1을 중지하면 master1이 slave -> master로 바뀜
+-slave1을 살리면 master1은 여전히 master이고, slave1은 master(직전상태) -> slave 상태로 올라옴
+-echo "cluster nodes" | redis-cli -c -p 7000 해서 master 3ea, slave 3ea 정상확인
+
+#시나리오2. role 전환 테스트 + insert (master1과 slave1)
+
+1. master 1번 셧다운 상태를 가정하여 서비스 중지
+rstop
+
+2. 아무 서버에서 클러스터 노드 상태 확인해 보면 slave 였던 서버가 master가 되었음
+rconsole
+cluster nodes
+>> master 1번은 "master, fail", slave 1번은 "slave -> master"로 변경됨 
+
+3. master였던 서버가 장애 나도 제대로 동작하는 지 확인하기 위해
+이제 막 master가 된 slave 1번 서버에 들어가서 새로운 key insert
+set key1 value1
+set key2 value2
+set key3 value3
+set key4 value4
+set key5 value5
+set key6 value6
+set key7 value7
+set key8 value8
+set key9 value9
+>> 마스터 3개의 서버에 랜덤하게 균등 wirte 하게 됨 이 때 방금 master로 승격된 slave 1번의 IP주소가 보이면 OK
+
+#master/slave role과 설정 확인
+info replication
 
 
+4. master 1번 서비스를 실행하면 master(직전상태)에서 slave로 동작하고 있으며,
+클러스터 콘솔(처음 실행 때는 자기 자긴 바라봄)에서 크기를 보면 새로운 master에서 복재 받았음을 알 수 있음
+rconsole
+info keyspace
+
+5. 이제 slave가 된 이 서버에서 조회 하게 되면, master 서버로 redirect 되는 것을 확인 할 수 있고,
+이후 명령어들은 master에서 수행되어 진다. -> 프롬프트가 master IP로 변경됨
+rconsole    --> 처음 실행 때는 자기 자신을 바라보면서 실행됨
+get key2
+
+6.원복은 slave1을 셧다운하고, 다시 올리면 master/slave 가 상호 스위치 된다.
 
 
+############################################
+# Redis Cluser에 master 노드 ADD
+#############################################
+
+#신규 redis 2대(master1대, slave1대)는 "Redis Default 구동 점검" 단계까지 설치 한다.
+
+#아무 마스터 서버에서 클러스터 추가함
+#명령어 : redis-trib.rb add-node 추가할서버:포트 기존클러스터서버:포트
+
+/app/redis/redis-stable/src/redis-trib.rb add-node 10.10.xx.xx:7000 10.10.64.51:7000
+
+#슬롯 재분배
+/root/redis-stable/src/redis-trib.rb reshard 10.10.xx.xx:7000
+>>How many slots do you want to move (from 1 to 16384)? 4096 --> 전체 Hash Slot이 16,384을 4로 나눠서 4096 입력
+>>What is the receiving node ID? *************   --> 막 추가한 서버의 ID입력
+>>Source node #1:all   --> 4996개를 기존 모든 마스터에서 균등하게 가져올 것이므로 all 입력
+
+#이제 막 추가한 master 서버에  slave 지정
+>>master-id는 방금 추가한 서버의 ID
+>>명령어 뒷 부분의 IP주소 2개는 slave:port  master:port의 순서임
+/app/redis/redis-stable/src/redis-trib.rb add-node --slave --master-id ********* 10.10.xx.xx:7000 10.10.xx.xx:7000
 
 
+############################################
+# Redis Cluser에 master 노드 Delete
+############################################
+#명령어 : redis-trib.rb del-node [ANY MASTER IP:포트 삭제할서버-ID
+/app/redis/redis-stable/src/redis-trib.rb del-node 10.10.64.51:7000 ***********************
 
+#삭제할 서버는 slot이 없어야 함으로 샤딩명령어 사용해서 다른 서버로 slot move한다
+#샤딩명령어는 source, destination, 서버ID 3가지만 알면 클러스터 내 서버간 슬롯 moving
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+참고. URL http://bstar36.tistory.com/361
 
 
 

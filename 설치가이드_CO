@@ -587,16 +587,14 @@ get key2
 cd /root
 mkdir cronjobs
 cd /root/cronjobs
-
--------------------------------------------------------------
 cat << EOF > /root/cronjobs/flush_redis_log.sh
 #!/bin/sh
-
 echo > /var/log/redis.log
 EOF
--------------------------------------------------------------
-
 chmod 755 /root/cronjobs/flush_redis_log.sh
+ll
+
+
 
 
 crontab -e

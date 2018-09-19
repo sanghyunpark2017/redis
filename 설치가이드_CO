@@ -577,5 +577,40 @@ get key2
 
 
 
+############################################
+# Redis 로그
+############################################
+#verbose(현재), notice 
+
+
+### flush sh 
+cd /root
+mkdir cronjobs
+cd /root/cronjobs
+
+-------------------------------------------------------------
+cat << EOF > /root/cronjobs/flush_redis_log.sh
+#!/bin/sh
+
+echo > /var/log/redis.log
+EOF
+-------------------------------------------------------------
+
+chmod 755 /root/cronjobs/flush_redis_log.sh
+
+
+crontab -e
+
+내용추가
+
+###flush redis log
+0 0 * * * /root/cronjobs/flush_redis_log.sh
+
+
+
+
+
+
+
 
 

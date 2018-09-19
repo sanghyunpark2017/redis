@@ -1,1 +1,295 @@
-#
+############################################
+# Note
+#############################################
+-마스터와 슬레이드 수동으로 만듬
+
+
+
+############################################
+# OS Setting
+#############################################
+
+#SELINUX disabled
+sed -i "s/SELINUX=enforcing/SELINUX=disabled/g" /etc/selinux/config
+cat  /etc/selinux/config
+
+
+#방화벽 disable(app ip 확정되면 정책적용 & enabe)
+systemctl stop firewalld
+systemctl disable firewalld
+
+
+#패러미터 조정(이미 적용되었으면 PASS)
+cat << EOF >> /etc/security/limits.conf
+*          soft    nofile          65536
+*          hard    nofile          65536
+EOF
+
+
+cat << EOF >> /etc/sysctl.conf
+vm.overcommit_memory = 1
+EOF
+cat  /etc/sysctl.conf
+
+
+cat << EOF >>  /etc/rc.local
+sysctl -w net.core.somaxconn=65535
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+EOF
+cat   /etc/rc.local
+
+chmod +x /etc/rc.d/rc.local
+
+
+#재부팅하여 설정반영
+shutdown -r now
+
+
+#tcp backlog 적용 확인
+sysctl net.core.somaxconn
+
+
+
+
+
+############################################
+# PreInstall(OS)
+#############################################
+
+yum update -y
+yum install wget net-tools make gcc tcl libc*-dev -y
+
+
+############################################
+# PreInstall(ruby)
+#############################################
+
+#Install RVM
+gpg2 --keyserver hkp://keys.gnupg.net --recv-keys D39DC0E3
+curl -L get.rvm.io | bash -s stable
+touch /etc/profile.d/rvm.sh
+
+
+#최신 stable 버전 확인하면 2018년 9월 19일 현재 2.5.1
+#https://www.ruby-lang.org/en/downloads/
+#>> 홈페이지 상단에 The current stable version is 2.5.1.
+#위 홈페이지에서 확인한 stable version을 지정하여 다운로드&컴파일 설치(수분 소요)
+/usr/local/rvm/bin/rvm install 2.5.1
+
+
+#설치된 버전 확인한 후
+/usr/local/rvm/bin/rvm list
+
+#default ruby로 지정
+/usr/local/rvm/bin/rvm alias create default ruby-2.5.1
+
+#모든 ssh 터미널 종료하고 재접속
+exit
+
+
+#버전확인
+ruby --version
+>ruby 2.5.1p57 (2018-03-29 revision 63029) [x86_64-linux]
+
+############################################
+# Install Redis
+#############################################
+#2018년 9월 현재 stable 버전이 4.0.11 임
+
+mkdir -p /app/redis
+cd /app/redis
+
+wget http://download.redis.io/releases/redis-stable.tar.gz
+tar -xvf redis-stable.tar.gz
+cd redis-stable
+
+make test
+
+#\o/ All tests passed without errors!        <--- 이 메세지가 나오면 OK
+
+make install
+
+
+#기본 설정파일 백업
+cp /app/redis/redis-stable/redis.conf   /app/redis/redis-stable/redis.conf.org
+
+
+#아직 클러스터 셋팅 전으로 워킹하는지만 테스트 후 exit
+/app/redis/redis-stable/src/redis-server /app/redis/redis-stable/redis.conf
+>># Server initialized
+>>* Ready to accept connections
+
+CTRL+c
+
+############################################
+# Install ruby for redis
+#############################################
+
+cd /app/redis/redis-stable
+gem install redis
+
+#그럼 아래와 같은 메시지 나오면 정상 설치된 것임 (??? 4.0.11이 아닌 4.0.2로 나옴)
+>>Fetching: redis-4.0.2.gem (100%)
+>>Successfully installed redis-4.0.2
+>>Installing ri documentation for redis-4.0.2
+>>Done installing documentation for redis after 0 seconds
+>>1 gem installed
+
+
+############################################
+# Redis 환결설정
+#############################################
+#redis 데몬실행 할 떄 redis.conf 파일위치를 지정함
+#이 파일의 기본 위치는 /app/redis/redis-stable 이나 별도의 디렉토리를 만든 후 기본 설정파일을 수정함
+#redis.conf파일을 수정함
+>>#bind 127.0.0.1 --> 주석처리
+>>protected-mode no --> yes 수정
+>>port 7000 --> 6379 수정
+>>pidfile /var/run/redis_7000.pid --> redis_6379.pid 수정
+>>cluster-enabled yes --> 행추가
+>>cluster-config-file /app/redis/redis-stable/conf/nodes-7000.conf --> 행추가
+>>cluster-node-timeout 15000 --> 행추가
+
+ 
+#위 수정사항을 반영하여 redis.conf 파일을 만듬 (현재는 모든 서버가 공통의 설정임)
+
+mkdir -p /app/redis/redis-stable/conf
+cd /app/redis/redis-stable/conf
+
+---------------------------------------------------------
+cat << EOF > /app/redis/redis-stable/conf/redis.conf
+#bind 127.0.0.1
+protected-mode no
+port 7000
+tcp-backlog 511
+timeout 0
+tcp-keepalive 300
+daemonize no
+supervised no
+pidfile /var/run/redis_7000.pid
+loglevel notice
+logfile ""
+databases 16
+always-show-logo yes
+save 900 1
+save 300 10
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+dbfilename dump.rdb
+dir ./
+slave-serve-stale-data yes
+slave-read-only yes
+repl-diskless-sync no
+repl-diskless-sync-delay 5
+repl-disable-tcp-nodelay no
+slave-priority 100
+lazyfree-lazy-eviction no
+lazyfree-lazy-expire no
+lazyfree-lazy-server-del no
+slave-lazy-flush no
+appendonly no
+appendfilename "appendonly.aof"
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+aof-load-truncated yes
+aof-use-rdb-preamble no
+lua-time-limit 5000
+slowlog-log-slower-than 10000
+slowlog-max-len 128
+latency-monitor-threshold 0
+notify-keyspace-events ""
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+list-max-ziplist-size -2
+list-compress-depth 0
+set-max-intset-entries 512
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+hll-sparse-max-bytes 3000
+activerehashing yes
+client-output-buffer-limit normal 0 0 0
+client-output-buffer-limit slave 256mb 64mb 60
+client-output-buffer-limit pubsub 32mb 8mb 60
+hz 10
+aof-rewrite-incremental-fsync yes
+cluster-enabled yes
+cluster-config-file /app/redis/redis-stable/conf/nodes-7000.conf
+cluster-node-timeout 15000
+EOF
+ll
+
+------------------------------------------------------------------------------------------------------------------
+
+
+############################################
+# Redis 시작/종료 alias 생성
+#############################################
+
+------------------------------------------------------------------------------------------------------------------
+cat << EOF >> /root/.bash_profile
+# Redis port 7000
+alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
+alias rstop='redis-cli -p 7000 shutdown'
+alias rconsole='redis-cli -c -p 7000'
+EOF
+
+------------------------------------------------------------------------------------------------------------------
+
+
+############################################
+# Redis 
+#############################################
+#모든 서버에서 실행해 봄
+rstart
+
+#지금까지 진행 과정 중 정상인지 체크
+>>No cluster configuration found,  --> 클러스터 구성 전이므로 OK
+>>I'm ******************  --> rconsole 후  cluster info로도 확인
+>>Redis 4.0.11
+>>Port: 7000
+>>ps -ef | grep redis
+>>netstat -nlp | grep redis --> loopback이 아닌 all ip로 리슨하는지 확인
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

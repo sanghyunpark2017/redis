@@ -241,18 +241,179 @@ EOF
 
 
 ############################################
-# Redis 
+# Redis Default 구동 점검
 #############################################
 #모든 서버에서 실행해 봄
 rstart
 
 #지금까지 진행 과정 중 정상인지 체크
->>No cluster configuration found,  --> 클러스터 구성 전이므로 OK
+>>No cluster configuration found,  --> 클러스터 생성 전이므로 메시지 내용은 정상
 >>I'm ******************  --> rconsole 후  cluster info로도 확인
 >>Redis 4.0.11
 >>Port: 7000
->>ps -ef | grep redis
->>netstat -nlp | grep redis --> loopback이 아닌 all ip로 리슨하는지 확인
+
+#프로세스 구동 확인
+#loopback이 아닌 all ip로 리슨하는지 확인
+#nodes-7000.conf 파일이 생성 --> 이 내용은 rconsole 후  cluster info의 결과와 동일함
+clear
+ps -ef | grep redis
+netstat -nlp | grep redis
+ll /app/redis/redis-stable/conf
+
+
+############################################
+# Redis 클러스터 생성(Master먼저)
+#############################################
+#클러스터 생성 명령 redis-trib.rb는 아무 서버에서 수행해도 됨
+#레디스 클러스터는 16384 개의 Hash Slot을 가지는데 MASTER 서버 갯수 만큼 1/N 해서 나눠 가짐
+#클러스터가 생성되면 각각의 클러스터 노드끼리의 통신을 위한 포트들이 하나씩 더 생기게 되는데, 기본으로 설정된 port + 10000으로 생성
+#방화벽 포트 오픈은 TCP 7000, TCP 17000 해야함
+
+#6대 구성 계획
+10.10.64.51 master1
+10.10.64.52 master2
+10.10.64.53 master3
+10.10.64.54 slave1
+10.10.64.55 slave2
+10.10.64.56 slave3
+
+#redis-trib.rb로 클러스터 생성
+/app/redis/redis-stable/src/redis-trib.rb create 10.10.64.51:7000 10.10.64.52:7000 10.10.64.53:7000
+
+
+
+============================ 정상적인 설치 화면 ==================================================================
+>>> Creating cluster
+>>> Performing hash slots allocation on 3 nodes...
+Using 3 masters:
+10.10.64.51:7000
+10.10.64.52:7000
+10.10.64.53:7000
+M: 296ec7164d32b805bfdb1604ce5e89a4e6145a10 10.10.64.51:7000
+   slots:0-5460 (5461 slots) master
+M: 2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 10.10.64.52:7000
+   slots:5461-10922 (5462 slots) master
+M: 0295538b041c07adf2a2e0d1f87ebe56d74900c6 10.10.64.53:7000
+   slots:10923-16383 (5461 slots) master
+Can I set the above configuration? (type 'yes' to accept): yes --> yes 입력
+
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+Waiting for the cluster to join..
+>>> Performing Cluster Check (using node 10.10.64.51:7000)
+M: 296ec7164d32b805bfdb1604ce5e89a4e6145a10 10.10.64.51:7000
+   slots:0-5460 (5461 slots) master
+   0 additional replica(s)             --> 아직 slave는 없음(정상)
+M: 2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 10.10.64.52:7000
+   slots:5461-10922 (5462 slots) master
+   0 additional replica(s)             --> 아직 slave는 없음(정상)
+M: 0295538b041c07adf2a2e0d1f87ebe56d74900c6 10.10.64.53:7000
+   slots:10923-16383 (5461 slots) master
+   0 additional replica(s)             --> 아직 slave는 없음(정상)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+=================================================================================================================
+
+
+
+#클러스터생성확인1
+clear
+cat /app/redis/redis-stable/conf/nodes-7000.conf
+
+#클러스터생성확인2
+rconsole
+cluster nodes
+exit
+
+#둘다 같은 내용인 것으로 master 3대(id, 슬롯범위) 그리고 상태(connected) 확인 되면 OK
+=================================================================================================================
+2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 10.10.64.52:7000@17000 master - 0 1537320724515 2 connected 5461-10922
+296ec7164d32b805bfdb1604ce5e89a4e6145a10 10.10.64.51:7000@17000 myself,master - 0 0 1 connected 0-5460
+0295538b041c07adf2a2e0d1f87ebe56d74900c6 10.10.64.53:7000@17000 master - 0 1537320724222 3 connected 10923-16383
+vars currentEpoch 3 lastVoteEpoch 0
+=================================================================================================================
+
+#클러스터생성확인3(TCP 7000 그리고 TCP 17000)
+netstat -nlp  | grep 7000
+
+
+############################################
+# Redis Slave 지정
+#############################################
+#slave는 1개 씩 추가 하며 명령어에 mster와 묶일 slave IP를 같이 지정하기 때문에 아무 서버에서 실행해도 된다
+#명령어 뒷 부분의 IP주소 2개는 slave:port  mster:port의 순서임
+
+#master1(10.10.64.51)에 slave로 10.10.64.54를 지정하고자 하며,
+#아래 명령어에 master-id는 mater1의 ID임
+/app/redis/redis-stable/src/redis-trib.rb add-node --slave --master-id 296ec7164d32b805bfdb1604ce5e89a4e6145a10 10.10.64.54:7000 10.10.64.51:7000
+
+=================================================================================================================
+>>> Adding node 10.10.64.54:7000 to cluster 10.10.64.51:7000
+>>> Performing Cluster Check (using node 10.10.64.51:7000)     --> 현재 클러스터 상태를 check한 것으로 master3대 모두 slave 숫자는 0
+M: 296ec7164d32b805bfdb1604ce5e89a4e6145a10 10.10.64.51:7000
+   slots:0-5460 (5461 slots) master
+   0 additional replica(s)                                     --> 순차적으로 add 하는 과정에서 지정된 master는 0이 1로 변경될 것임
+M: 2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 10.10.64.52:7000
+   slots:5461-10922 (5462 slots) master
+   0 additional replica(s)
+M: 0295538b041c07adf2a2e0d1f87ebe56d74900c6 10.10.64.53:7000
+   slots:10923-16383 (5461 slots) master
+   0 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+>>> Send CLUSTER MEET to node 10.10.64.54:7000 to make it join the cluster.
+Waiting for the cluster to join.
+>>> Configure node as replica of 10.10.64.51:7000.
+[OK] New node added correctly.                                   --> slave add 정상처리
+=================================================================================================================
+
+
+
+#이런식으로 해서 나머지 2개의 master에 대한 slave도 순차적으로 실행함
+/app/redis/redis-stable/src/redis-trib.rb add-node --slave --master-id 2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 10.10.64.55:7000 10.10.64.52:7000
+
+/app/redis/redis-stable/src/redis-trib.rb add-node --slave --master-id 0295538b041c07adf2a2e0d1f87ebe56d74900c6 10.10.64.56:7000 10.10.64.53:7000
+
+
+#모두 추가 후 master 3, slave 3 확인
+[root@t1vcoredisdev02 ~]# rconsole
+127.0.0.1:7000> cluster nodes
+0295538b041c07adf2a2e0d1f87ebe56d74900c6 10.10.64.53:7000@17000 master - 0 1537322099000 3 connected 10923-16383
+982b1e830dcedf8a10a6abb8cda22b50052b8492 10.10.64.56:7000@17000 slave 0295538b041c07adf2a2e0d1f87ebe56d74900c6 0 1537322097000 3 connected
+296ec7164d32b805bfdb1604ce5e89a4e6145a10 10.10.64.51:7000@17000 master - 0 1537322095000 1 connected 0-5460
+36214e945b24b89d590d8531c84757278fd2ba8f 10.10.64.54:7000@17000 slave 296ec7164d32b805bfdb1604ce5e89a4e6145a10 0 1537322099936 1 connected
+c16e82242967966af117059586457eed8e31e3d6 10.10.64.55:7000@17000 slave 2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 0 1537322098000 2 connected
+2542bbfa9fecbb6e5c48b7787a6a7659617c5a9c 10.10.64.52:7000@17000 myself,master - 0 1537322098000 2 connected 5461-10922
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -1,4 +1,8 @@
 
+#앞서는 Cento7로 설치 했으나, 이번에는 Centos 6.9로 설치함
+#앞서 단계와 동일하며 make test 단계에서 에러가 발생하며, 그 때는 아래 순서로 진행
+
+
 
 make distclean
 make

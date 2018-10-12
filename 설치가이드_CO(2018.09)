@@ -241,10 +241,6 @@ cat << EOF >> /root/.bash_profile
 alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
 alias rstop='redis-cli -p 7000 shutdown'
 alias rconsole='redis-cli -c -p 7000'
-EOF
-
-
-cat << EOF >> /root/.bash_profile
 alias rlconsole='redis-cli -p 7000'
 EOF
 
@@ -258,6 +254,11 @@ EOF
 rstart
 
 #지금까지 진행 과정 중 정상인지 체크
+rconsole
+cluster info  -> redis 콘솔 내 입력
+exit
+
+
 >>No cluster configuration found,  --> 클러스터 생성 전이므로 메시지 내용은 정상
 >>I'm ******************  --> rconsole 후  cluster info로도 확인
 >>Redis 4.0.11

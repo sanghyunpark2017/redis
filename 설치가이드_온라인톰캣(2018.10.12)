@@ -2,11 +2,374 @@
 #앞서는 Cento7로 설치 했으나, 이번에는 Centos 6.9로 설치함
 #앞서 단계와 동일하며 make test 단계에서 에러가 발생하며, 그 때는 아래 순서로 진행
 
-cd /app/redis/redis-stable
-make test --> 에러 발생
-
+#cd /app/redis/redis-stable
+#make test --> 에러 발생
 
 
 make distclean
 make
 make test 
+
+#\o/ All tests passed without errors!        <--- 이 메세지가 나오면 OK
+
+make install
+
+
+-- 이후 부터 다시 이전 페이지 설치 과정 참조하여 진행 --
+
+
+
+
+############################################
+# Redis 클러스터 생성(Master먼저)
+#############################################
+#클러스터 생성 명령 redis-trib.rb는 아무 서버에서 수행해도 됨
+#레디스 클러스터는 16384 개의 Hash Slot을 가지는데 MASTER 서버 갯수 만큼 1/N 해서 나눠 가짐
+#클러스터가 생성되면 각각의 클러스터 노드끼리의 통신을 위한 포트들이 하나씩 더 생기게 되는데, 기본으로 설정된 port + 10000으로 생성
+#방화벽 포트 오픈은 TCP 7000, TCP 17000 해야함
+
+#6대 구성 계획
+10.10.28.32 slave1
+10.10.27.41 slave2
+10.10.28.33 slave3
+10.10.27.42 master1
+10.10.28.34 master2
+10.10.27.43 master3
+
+
+#redis-trib.rb로 master서버 3대를 가지고(지정하여) 클러스터 생성
+/app/redis/redis-stable/src/redis-trib.rb create 10.10.27.42:7000 10.10.28.34:7000 10.10.27.43:7000
+
+
+============================ 정상적인 설치 화면 ==================================================================
+>>> Creating cluster
+>>> Performing hash slots allocation on 3 nodes...
+Using 3 masters:
+10.10.27.42:7000
+10.10.28.34:7000
+10.10.27.43:7000
+M: afb14298411400575b4b9aca1a4debfc8865ac98 10.10.27.42:7000
+   slots:0-5460 (5461 slots) master
+M: 21ed643d84779bd50fbe0502490abd16a33b6e52 10.10.28.34:7000
+   slots:5461-10922 (5462 slots) master
+M: eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.27.43:7000
+   slots:10923-16383 (5461 slots) master
+Can I set the above configuration? (type 'yes' to accept): yes   --> yes 입력
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+Waiting for the cluster to join..
+>>> Performing Cluster Check (using node 10.10.27.42:7000)
+M: afb14298411400575b4b9aca1a4debfc8865ac98 10.10.27.42:7000
+   slots:0-5460 (5461 slots) master
+   0 additional replica(s)             --> 아직 slave는 없음(정상)
+M: eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.27.43:7000
+   slots:10923-16383 (5461 slots) master
+   0 additional replica(s)             --> 아직 slave는 없음(정상)
+M: 21ed643d84779bd50fbe0502490abd16a33b6e52 10.10.28.34:7000
+   slots:5461-10922 (5462 slots) master
+   0 additional replica(s)             --> 아직 slave는 없음(정상)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+=================================================================================================================
+
+
+
+#클러스터생성확인1
+clear
+cat /app/redis/redis-stable/conf/nodes-7000.conf
+
+#클러스터생성확인2
+rconsole
+cluster nodes
+exit
+
+#둘다 같은 내용인 것으로 master 3대(id, 슬롯범위) 그리고 상태(connected) 확인 되면 OK
+=================================================================================================================
+127.0.0.1:7000> cluster nodes
+afb14298411400575b4b9aca1a4debfc8865ac98 10.10.27.42:7000@17000 myself,master - 0 1539312080000 1 connected 0-5460
+eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.27.43:7000@17000 master - 0 1539312079000 3 connected 10923-16383
+21ed643d84779bd50fbe0502490abd16a33b6e52 10.10.28.34:7000@17000 master - 0 1539312080979 2 connected 5461-10922
+=================================================================================================================
+
+#클러스터생성확인3(TCP 7000 그리고 TCP 17000)
+netstat -nlp  | grep 7000
+
+
+############################################
+# Redis Slave 지정
+#############################################
+#slave는 1개 씩 추가 하며 명령어에 mster와 묶일 slave IP를 같이 지정함
+#현재 master 3대로 구성된 클러스터환경이므로 아무 서버에서 실행해도 된다
+#명령어 뒷 부분의 IP주소 2개는 slave:port  mster:port의 순서임
+
+#아래 처럼 서로 쌍을 이룰 것이므로
+K1PRedisOnline04(10.10.27.42) => K1VRedisOnline01(10.10.28.32)
+K1PRedisOnline05(10.10.28.34) => K1VRedisOnline02(10.10.27.41)
+K1PRedisOnline06(10.10.27.43) => K1PRedisOnline03(10.10.28.33)
+
+#앞서 할당된 ID로 하여 명령어로 구성하면 아래와 같음
+cd /app/redis/redis-stable/src
+./redis-trib.rb add-node --slave --master-id afb14298411400575b4b9aca1a4debfc8865ac98 10.10.28.32:7000 10.10.27.42:7000
+./redis-trib.rb add-node --slave --master-id 21ed643d84779bd50fbe0502490abd16a33b6e52 10.10.27.41:7000 10.10.28.34:7000
+./redis-trib.rb add-node --slave --master-id eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.28.33:7000 10.10.27.43:7000
+
+
+#이제 하나씩 실행하면서 진행 함
+#master K1PRedisOnline04(10.10.27.42)에 slave로 K1VRedisOnline01(10.10.28.32) 지정
+cd /app/redis/redis-stable/src
+./redis-trib.rb add-node --slave --master-id afb14298411400575b4b9aca1a4debfc8865ac98 10.10.28.32:7000 10.10.27.42:7000
+
+=================================================================================================================
+[root@K1PRedisOnline04 /app/redis/redis-stable/src]# ./redis-trib.rb add-node --slave --master-id afb14298411400575b4b9aca1a4debfc8865ac98 10.10.28.32:7000 10.10.27.42:7000
+>>> Adding node 10.10.28.32:7000 to cluster 10.10.27.42:7000
+>>> Performing Cluster Check (using node 10.10.27.42:7000)
+M: afb14298411400575b4b9aca1a4debfc8865ac98 10.10.27.42:7000
+   slots:0-5460 (5461 slots) master
+   0 additional replica(s)               --> 현재는 slave 없는 상태
+M: eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.27.43:7000
+   slots:10923-16383 (5461 slots) master
+   0 additional replica(s)               --> 현재는 slave 없는 상태
+M: 21ed643d84779bd50fbe0502490abd16a33b6e52 10.10.28.34:7000
+   slots:5461-10922 (5462 slots) master
+   0 additional replica(s)               --> 현재는 slave 없는 상태
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+>>> Send CLUSTER MEET to node 10.10.28.32:7000 to make it join the cluster.
+Waiting for the cluster to join.
+>>> Configure node as replica of 10.10.27.42:7000.
+[OK] New node added correctly.                                   --> slave add 정상처리
+[root@K1PRedisOnline04 /app/redis/redis-stable/src]#
+=================================================================================================================
+
+#이런식으로 해서 나머지 2개의 master에 대한 slave도 순차적으로 실행함(아무서버에서 실행)
+cd /app/redis/redis-stable/src
+./redis-trib.rb add-node --slave --master-id 21ed643d84779bd50fbe0502490abd16a33b6e52 10.10.27.41:7000 10.10.28.34:7000
+./redis-trib.rb add-node --slave --master-id eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.28.33:7000 10.10.27.43:7000
+
+
+#이제 모두 추가되었는지 확인해 보면 master 3, slave 3 등 총 6대 모두 conntected인지 확인 가능
+=================================================================================================================
+[root@K1PRedisOnline04 /app/redis/redis-stable/src]# rconsole
+127.0.0.1:7000> cluster nodes
+be649f8d31eec2ccffe9f73e067a3b8c95b3abbf 10.10.27.41:7000@17000 slave 21ed643d84779bd50fbe0502490abd16a33b6e52 0 1539312966000 2 connected
+afb14298411400575b4b9aca1a4debfc8865ac98 10.10.27.42:7000@17000 myself,master - 0 1539312966000 1 connected 0-5460
+b170eac0415291c532e29709155d5dd8f623236e 10.10.28.32:7000@17000 slave afb14298411400575b4b9aca1a4debfc8865ac98 0 1539312968565 1 connected
+18e1ea3972428ef4e2e7db5d4340d839fd41a0d4 10.10.28.33:7000@17000 slave eb39661a885b7b8aa1d0baaa146b94cb262e24ea 0 1539312966557 3 connected
+21ed643d84779bd50fbe0502490abd16a33b6e52 10.10.28.34:7000@17000 master - 0 1539312967000 2 connected 5461-10922
+eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.27.43:7000@17000 master - 0 1539312967561 3 connected 10923-16383
+127.0.0.1:7000>
+=================================================================================================================
+
+
+############################################
+# Redis 데이터분배 테스트
+#############################################
+#모든 서버 stop
+rstop
+
+#master 1번 서버는 창을 2개 열고 각각 실행
+tail -f /var/log/redis.log
+
+rconsole
+info keyspace
+
+#모든 서버 start
+rstart
+
+
+1. key/value 테스트 데이터(1,048,576개, 28GB) 다운로드
+cd /root
+wget http://10.10.63.63:8089/redis-input-test.txt.bin
+wc -l /root/redis-input-test.txt.bin
+
+2. 1백만개 밀어 넣기 (약 25초 소요)
+cat /root/redis-input-test.txt.bin | redis-cli -p 7000 >> /root/redis-input.out  
+
+!!! 349473에서 멈춤
+
+
+3.확인해 보면 다른 마스터 서버로도 생성되는 것을 알 수 있음
+more  /root/redis-input.out  
+
+=================================================================================
+MOVED 9189 10.10.64.52:7000
+
+OK
+OK
+MOVED 13120 10.10.64.53:7000  --> 다른 마스터서버에 생성됨을 알 수 있음
+
+MOVED 9057 10.10.64.52:7000
+
+OK
+OK
+MOVED 13004 10.10.64.53:7000
+
+MOVED 8941 10.10.64.52:7000
+
+MOVED 5850 10.10.64.52:7000
+...
+..
+=================================================================================
+
+4.마스터 3대 각각 "info keyspace"를 확인해 보니 1번 master만 저장되어 있음
+>> 명령어를 실행한 1번 마스터만 349,473 개에 멈춘 것을 알 수 있음
+>> 이는 명령어 중 "redis-cli -p 7000" 클러스터를 가리키는 "-c"가 누락되어 발생한 것임
+
+5.1번 마스터에 모든 키를 지우고
+rlconsole
+flushall
+info keyspace
+
+6.클러스터에 "-c"에 넣음
+cat /root/redis-input-test.txt.bin | redis-cli -c -p 7000 >> /root/redis-input.out  
+
+7.마스터 3대에 골고루 들어갔음
+#1,048,575개 넣어서 master 3대 합 1,048,576이 나옴
+#slave도 쌍이 되는 master 서버와 동일한 숫자가 나옴
+master1 : 349473
+master2 : 349632
+master3 : 349471
+=> 1,048,576
+
+8.마스터 1번에서 검색하고
+keys *999999
+>1) "key999999"
+>2) "key1999999"
+>(이하 생략)
+
+9.마스터 1번이 가지고 있지 않은 키를 검색하면 그 키를 가지고 있는 마스터에서 가져옴
+get key999998
+-> Redirected to slot [6453] located at 10.10.64.52:7000
+"value999998"
+
+-- 테스트 끝 --
+
+10.마스터서버 3대 모두 flush, slave 서버는 쓰기 권한 없어서 실패
+flushall
+
+
+############################################
+# Redis FailOver 테스트
+#############################################
+
+#현재 클러스터 노드 상태 (클러스터 모드이므로 아무 서버나 동일 결과)
+echo "cluster nodes" | redis-cli -c -p 7000
+
+#시나리오1. role 전환 테스트 (master1과 slave1)
+-master1 서비스를 중지하면 이 서버와 매핑된 slave1서버가 slave -> master
+-master1 서비스를 살리면 slave1은  master 상태 유지하고, master1이 master(직전상태) -> slave 상태로 올라옴
+-slave1을 중지하면 master1이 slave -> master로 바뀜
+-slave1을 살리면 master1은 여전히 master이고, slave1은 master(직전상태) -> slave 상태로 올라옴
+-echo "cluster nodes" | redis-cli -c -p 7000 해서 master 3ea, slave 3ea 정상확인
+
+#시나리오2. role 전환 테스트 + insert (master1과 slave1)
+
+1. master 1번 셧다운 상태를 가정하여 서비스 중지
+rstop
+
+2. 아무 서버에서 클러스터 노드 상태 확인해 보면 slave 였던 서버가 master가 되었음
+rconsole
+cluster nodes
+>> master 1번은 "master, fail", slave 1번은 "slave -> master"로 변경됨 
+
+3. master였던 서버가 장애 나도 제대로 동작하는 지 확인하기 위해
+이제 막 master가 된 slave 1번 서버에 들어가서 새로운 key insert
+set key1 value1
+set key2 value2
+set key3 value3
+set key4 value4
+set key5 value5
+set key6 value6
+set key7 value7
+set key8 value8
+set key9 value9
+>> 마스터 3개의 서버에 랜덤하게 균등 wirte 하게 됨 이 때 방금 master로 승격된 slave 1번의 IP주소가 보이면 OK
+
+#master/slave role과 설정 확인
+info replication
+
+
+4. master 1번 서비스를 실행하면 master(직전상태)에서 slave로 동작하고 있으며,
+클러스터 콘솔(처음 실행 때는 자기 자긴 바라봄)에서 크기를 보면 새로운 master에서 복재 받았음을 알 수 있음
+rconsole
+info keyspace
+
+5. 이제 slave가 된 이 서버에서 조회 하게 되면, master 서버로 redirect 되는 것을 확인 할 수 있고,
+이후 명령어들은 master에서 수행되어 진다. -> 프롬프트가 master IP로 변경됨
+rconsole    --> 처음 실행 때는 자기 자신을 바라보면서 실행됨
+get key2
+
+6.원복은 slave1을 셧다운하고, 다시 올리면 master/slave 가 상호 스위치 된다.
+
+
+############################################
+# Redis Cluser에 master 노드 ADD
+#############################################
+
+#신규 redis 2대(master1대, slave1대)는 "Redis Default 구동 점검" 단계까지 설치 한다.
+
+#아무 마스터 서버에서 클러스터 추가함
+#명령어 : redis-trib.rb add-node 추가할서버:포트 기존클러스터서버:포트
+
+/app/redis/redis-stable/src/redis-trib.rb add-node 10.10.xx.xx:7000 10.10.64.51:7000
+
+#슬롯 재분배
+/root/redis-stable/src/redis-trib.rb reshard 10.10.xx.xx:7000
+>>How many slots do you want to move (from 1 to 16384)? 4096 --> 전체 Hash Slot이 16,384을 4로 나눠서 4096 입력
+>>What is the receiving node ID? *************   --> 막 추가한 서버의 ID입력
+>>Source node #1:all   --> 4996개를 기존 모든 마스터에서 균등하게 가져올 것이므로 all 입력
+
+#이제 막 추가한 master 서버에  slave 지정
+>>master-id는 방금 추가한 서버의 ID
+>>명령어 뒷 부분의 IP주소 2개는 slave:port  master:port의 순서임
+/app/redis/redis-stable/src/redis-trib.rb add-node --slave --master-id ********* 10.10.xx.xx:7000 10.10.xx.xx:7000
+
+
+############################################
+# Redis Cluser에 master 노드 Delete
+############################################
+#명령어 : redis-trib.rb del-node [ANY MASTER IP:포트 삭제할서버-ID
+/app/redis/redis-stable/src/redis-trib.rb del-node 10.10.64.51:7000 ***********************
+
+#삭제할 서버는 slot이 없어야 함으로 샤딩명령어 사용해서 다른 서버로 slot move한다
+#샤딩명령어는 source, destination, 서버ID 3가지만 알면 클러스터 내 서버간 슬롯 moving
+
+참고. URL http://bstar36.tistory.com/361
+
+
+
+############################################
+# Redis 로그
+############################################
+#verbose(현재), notice 
+
+
+### flush sh 
+cd /root
+mkdir cronjobs
+cd /root/cronjobs
+cat << EOF > /root/cronjobs/flush_redis_log.sh
+#!/bin/sh
+echo > /var/log/redis.log
+EOF
+chmod 755 /root/cronjobs/flush_redis_log.sh
+ll
+
+
+
+
+crontab -e
+
+내용추가
+
+###flush redis log
+0 0 * * * /root/cronjobs/flush_redis_log.sh
+
+
+
+

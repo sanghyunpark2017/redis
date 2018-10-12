@@ -2,9 +2,9 @@
 #앞서는 Cento7로 설치 했으나, 이번에는 Centos 6.9로 설치함
 #앞서 단계와 동일하며 make test 단계에서 에러가 발생하며, 그 때는 아래 순서로 진행
 
+
 #cd /app/redis/redis-stable
 #make test --> 에러 발생
-
 
 make distclean
 make
@@ -166,9 +166,54 @@ eb39661a885b7b8aa1d0baaa146b94cb262e24ea 10.10.27.43:7000@17000 master - 0 15393
 =================================================================================================================
 
 
+
+############################################
+# Redis 구동계정 변경 (root -> wasadm)
+#############################################
+
+#wasadm 계정생성
+groupadd -g 505 wasadm
+useradd -g 505 -u 505 wasadm
+passwd wasadm
+>>******##
+
+#기존 root 소요자를 wasadm으로 변경
+chown wasadm:wasadm /var/log/redis.log
+chown -R wasadm:wasadm /app/redis
+
+#wasadm 계정에 alias 등록
+
+su - wasadm
+
+cat << EOF >> /home/wasadm/.bash_profile
+# Redis port 7000
+alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
+alias rstop='redis-cli -p 7000 shutdown'
+alias rconsole='redis-cli -c -p 7000'
+alias rlconsole='redis-cli -p 7000'
+EOF
+
+exit
+su - wasadm
+alias
+
+#redis 실행
+rstart
+
+
 ############################################
 # Redis 데이터분배 테스트
 #############################################
+#CO테스트계(누타닉스1K)와 비교해보면 물리서버 쪽에서 네트워킹 성능도 떨어지는듯 함
+#NON클러스터 모드에서 넣을 때는 약 3배가 느리고,
+#클러스터 모드로 넣을 때는 밀어넣는 서버 쪽에 TIME_OUT이 과도하게 쌓이면서 커넥션 오류가 나옴
+ -> 아마도 처리가 다소 지연되는 마스터서버(물리)가 처리 속도가 처지면서 유발되는 듯 하며,
+    해당 서버로의 TCP세션 갯수 초과인 것으로 추정됨, 누타닉스 1K는 이 문제는 없었음.
+#밀어넣는 서버 쪽에 "net.ipv4.tcp_tw_reuse = 1" 을 넣어주고 테스트 해보면 커넥션 오류는 나오지 않음
+#벌크 insert는 슬롯분배 확인하고자 함이니 그냥  패스함
+
+
+
 #모든 서버 stop
 rstop
 
@@ -182,19 +227,25 @@ info keyspace
 rstart
 
 
-1. key/value 테스트 데이터(1,048,576개, 28GB) 다운로드
-cd /root
+1.(참고만)key/value 테스트 데이터(1,048,576개, 28GB) 다운로드
+cd /home/wasadm
 wget http://10.10.63.63:8089/redis-input-test.txt.bin
-wc -l /root/redis-input-test.txt.bin
-
-2. 1백만개 밀어 넣기 (약 25초 소요)
-cat /root/redis-input-test.txt.bin | redis-cli -p 7000 >> /root/redis-input.out  
-
-!!! 349473에서 멈춤
+wc -l /home/wasadm/redis-input-test.txt.bin
 
 
-3.확인해 보면 다른 마스터 서버로도 생성되는 것을 알 수 있음
-more  /root/redis-input.out  
+2. (참고만)백만개 밀어 넣기
+cat /home/wasadm/redis-input-test.txt.bin | redis-cli -p 7000 > /home/wasadm/redis-input.out  
+
+
+[비교]
+CO 누타닉스 1k는 약 25초 소요됨
+이 물리서버는 약 1분 14초 소요됨
+
+둘다 
+!!! 349,473에서 멈춤
+
+3.(참고만)확인해 보면 다른 마스터 서버로도 생성되는 것을 알 수 있음
+more  /home/wasadm/redis-input.out  
 
 =================================================================================
 MOVED 9189 10.10.64.52:7000
@@ -225,15 +276,30 @@ rlconsole
 flushall
 info keyspace
 
+###################################################################################
+#벌크 INSERT하는 서버에서는 대량의 TIME_WAIT이 발생하니 임시로 REUSE를 해 놓고 해보자
+#root
+cat << EOF >> /etc/sysctl.conf
+net.ipv4.tcp_tw_reuse = 1
+EOF
+cat  /etc/sysctl.conf
+###################################################################################
+
 6.클러스터에 "-c"에 넣음
-cat /root/redis-input-test.txt.bin | redis-cli -c -p 7000 >> /root/redis-input.out  
+cat /home/wasadm/redis-input-test.txt.bin | redis-cli -c -p 7000 > /home/wasadm/redis-input.out  
+
+
+참고!!! 
+-한건 단위로 insert하기 때문에 밀어 넣는 서버에 netstat는 수만건의 "TIME_WAIT"가 남게됨
+-
+
 
 7.마스터 3대에 골고루 들어갔음
 #1,048,575개 넣어서 master 3대 합 1,048,576이 나옴
 #slave도 쌍이 되는 master 서버와 동일한 숫자가 나옴
-master1 : 349473
-master2 : 349632
-master3 : 349471
+master1 : 349,473
+master2 : 349,632
+master3 : 349,471
 => 1,048,576
 
 8.마스터 1번에서 검색하고
@@ -249,7 +315,7 @@ get key999998
 
 -- 테스트 끝 --
 
-10.마스터서버 3대 모두 flush, slave 서버는 쓰기 권한 없어서 실패
+10.마스터서버 3대에서 모두 flush 실행 (slave 서버에서는 쓰기 권한 없으므로 삭제 안됨)
 flushall
 
 
@@ -344,31 +410,31 @@ get key2
 
 
 ############################################
-# Redis 로그
+# Redis 로그 정리
 ############################################
 #verbose(현재), notice 
 
 
 ### flush sh 
-cd /root
+cd /home/wasadm
 mkdir cronjobs
-cd /root/cronjobs
-cat << EOF > /root/cronjobs/flush_redis_log.sh
+cd /home/wasadm/cronjobs
+cat << EOF > /home/wasadm/cronjobs/flush_redis_log.sh
 #!/bin/sh
 echo > /var/log/redis.log
 EOF
-chmod 755 /root/cronjobs/flush_redis_log.sh
+chmod 755 /home/wasadm/cronjobs/flush_redis_log.sh
 ll
 
-
-
-
 crontab -e
-
-내용추가
-
+----------------------------------------------------------------
 ###flush redis log
-0 0 * * * /root/cronjobs/flush_redis_log.sh
+0 0 * * * /home/wasadm/cronjobs/flush_redis_log.sh
+----------------------------------------------------------------
+
+
+
+
 
 
 

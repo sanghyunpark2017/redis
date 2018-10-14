@@ -1,14 +1,30 @@
 
+
+###############
+# 실행/종료
+###############
 rstart : redis 실행
 rstop : redis 종료
 rconsole : redis 콘솔(현재서버접속)
 
+
+###############
+# 조회
+###############
 cluster info : 클러스터상태
 cluster nodes : 클러스터 노드들 상태
 info keyspace : redis 레코드 수
-flushall : redis 레코드 전체 삭제
+info replication : master:slave 조회
+get key* 
+
+###############
+# 변경
+###############
+flushall : redis 레코드 전체 삭제 (쓰기권한이 있는 master에서만 가능하고, 읽기권한인 slave는 안됨)
 
 
-info replication
+###############
+# 노드추가/삭제
+###############
 
-/app/redis/redis-stable/src/redis-trib.rb del-node 10.10.64.51:7000 ***********************
+#CO REDIS 참고

@@ -183,7 +183,7 @@ save 60 10000
 stop-writes-on-bgsave-error yes
 rdbcompression yes
 rdbchecksum yes
-dbfilename dump.rdb
+dbfilename redis-dbfile.rdb
 dir ./
 slave-serve-stale-data yes
 slave-read-only yes

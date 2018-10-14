@@ -183,8 +183,8 @@ save 60 10000
 stop-writes-on-bgsave-error yes
 rdbcompression yes
 rdbchecksum yes
-dbfilename redis-dbfile.rdb
-dir ./
+dir /app/redis/redis-stable/
+dbfilename rsredis-database.rdb
 slave-serve-stale-data yes
 slave-read-only yes
 repl-diskless-sync no

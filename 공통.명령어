@@ -1,0 +1,14 @@
+
+rstart : redis 실행
+rstop : redis 종료
+rconsole : redis 콘솔(현재서버접속)
+
+cluster info : 클러스터상태
+cluster nodes : 클러스터 노드들 상태
+info keyspace : redis 레코드 수
+flushall : redis 레코드 전체 삭제
+
+
+info replication
+
+/app/redis/redis-stable/src/redis-trib.rb del-node 10.10.64.51:7000 ***********************

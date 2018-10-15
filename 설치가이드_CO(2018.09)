@@ -165,7 +165,8 @@ cat << EOF > /app/redis/redis-stable/conf/redis.conf
 #bind 127.0.0.1
 protected-mode no
 port 7000
-tcp-backlog 511
+#tcp-backlog 511
+tcp-backlog 65535
 timeout 0
 tcp-keepalive 300
 daemonize no

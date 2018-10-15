@@ -191,6 +191,9 @@ alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
 alias rstop='redis-cli -p 7000 shutdown'
 alias rconsole='redis-cli -c -p 7000'
 alias rlconsole='redis-cli -p 7000'
+alias rclsinfo='echo "cluster info" | redis-cli -c -p 7000'
+alias rclsnodes='echo "cluster nodes" | redis-cli -c -p 7000'
+alias rkeyspace='echo "info keyspace" | redis-cli -c -p 7000'
 EOF
 
 exit

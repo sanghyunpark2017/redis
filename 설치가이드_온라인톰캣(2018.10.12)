@@ -467,7 +467,7 @@ get key2
 #아무 마스터 서버에서 클러스터 추가함
 #명령어 : redis-trib.rb add-node 추가할서버:포트 기존클러스터서버:포트
 
-/app/redis/redis-stable/src/redis-trib.rb add-node 10.10.xx.xx:7000 10.10.64.51:7000
+/app/redis/redis-stable/src/redis-trib.rb add-node 10.10.xx.xx:7000 10.10.27.42:7000
 
 #슬롯 재분배
 /root/redis-stable/src/redis-trib.rb reshard 10.10.xx.xx:7000
@@ -485,7 +485,7 @@ get key2
 # Redis Cluser에 master 노드 Delete
 ############################################
 #명령어 : redis-trib.rb del-node [ANY MASTER IP:포트 삭제할서버-ID
-/app/redis/redis-stable/src/redis-trib.rb del-node 10.10.64.51:7000 ***********************
+/app/redis/redis-stable/src/redis-trib.rb del-node 10.10.27.42:7000 ***********************
 
 #삭제할 서버는 slot이 없어야 함으로 샤딩명령어 사용해서 다른 서버로 slot move한다
 #샤딩명령어는 source, destination, 서버ID 3가지만 알면 클러스터 내 서버간 슬롯 moving

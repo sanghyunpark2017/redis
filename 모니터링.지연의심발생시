@@ -1,0 +1,61 @@
+
+##################
+# 개요
+##################
+-모든 마스터 서버 마다의 각자 설정이므로 동일한 latency 임계치를 할 것
+-이벤트기록은 1초 단위이며, 같은 이벤트가 1초에 여러번 발생했을 경우 가장 큰 값 하나만 기록됨
+-참고사이트 : http://redisgate.kr/redis/server/latency.php
+
+
+####################################
+# latency 모니터링 활성화
+####################################
+
+#콘솔실행(wasadm)
+rconsole
+
+#현재 latency 모니터링 값 확인
+config get latency-monitor-threshold
+
+#latency 모니터링 값을 0(사용안함)에서 100(밀리세컨드)로 변경 (단, 상황에 따라 낮추거나 늘릴 것)
+config set latency-monitor-threshold 100
+
+#latency  변경 확인
+config get latency-monitor-threshold
+
+~~~~~~~~~~~~ 이 떄 부터 모니터링하여 지연이벤트를 기록하기 시작 함 ~~~~~~~~~~~~
+
+#수분 후에 임계치 초과된 모든 이벤트 표시
+latency latest
+
+>> 이벤트명 ex) "fork" or "command" 등
+>> 마지막 실행 시각(Linux timestamp)
+>> 마지막 수행된 응답시간(milliseconds) 
+>> 가장 오래걸린 응답시간(milliseconds)
+
+#위에 이벤트별로 최대 160개 표시
+latency history command
+
+#위에 이벤트별로 그래프로 표시
+latency graph command
+
+#가이드
+latency doctor
+
+####################################
+# latency 모니터링 비활성화 (원상복구)
+####################################
+
+#지금까지 기록된 이벤트 삭제
+latency reset
+
+#latency monitoring 비활성
+config set latency-monitor-threshold 0
+
+#latency monitoring 비활성 확인
+config get latency-monitor-threshold
+
+
+
+
+

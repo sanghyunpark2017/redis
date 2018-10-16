@@ -226,13 +226,37 @@ hz 10
 aof-rewrite-incremental-fsync yes
 cluster-enabled yes
 cluster-config-file /app/redis/redis-stable/conf/nodes-7000.conf
-cluster-node-timeout 15000
+cluster-node-timeout 5000
 cluster-require-full-coverage no
 cluster-slave-validity-factor 0
 EOF
-ll
-
 ------------------------------------------------------------------------------------------------------------------
+
+*패러미터 설명
+protected-mode no     평문통신
+port 7000     서비스(ex. tocmat)가 바라보는 리슨포트
+tcp-backlog 65535  OS에서 65535로 늘려준 값
+daemonize no    데몬사용않음
+loglevel verbose 
+logfile "/var/log/redis.log“   verbose모드이므로 매일 자정에 로그 리셋(crontab) 함
+save 900 1   900초(15분) 동안 1번 이상 key  변경이 발생하면 저장
+save 300 10  300초(5분) 동안 10번 이상 key 변경이 발생하면 저장
+save 60 10000  60초(1분) 동안 10,000번 이상 key  변경이 발생하면 저장
+appendonly no   AOF(Append Only File) 사용하지 않음
+dir /app/redis/redis-stable/      database파일의 위치
+dbfilename rsredis-database.rdb  database파일명
+cluster-node-timeout 5000   node의 DOWN 판단기준을 5초로 하고, DOWN판정이면 slave를 master로 승격시킴
+cluster-require-full-coverage no  슬레이브가 없는 마스터 노드가 다운되더라도 클러스터는 다운되지 않고 살아있게함
+cluster-slave-validity-factor 0   master와 slave 간 교신단절이 오래되어도 master/slave 관계 유지함
+
+*패러미터 부연설명
+-cluster-node-timeout 5000 : master노드가 과반수 이어야 함 (과반수 이상의 master노드가 DOWN으로 판정하는 방식-다수결)
+-cluster-require-full-coverage no : 이 옵션과 무관하게 클러스터 내 running master 수는 과반수 이어야 동작함
+-save : 이 옵션을 지정하면 RDB(snapshot) 방식을 사용함
+
+
+
+
 
 
 ############################################

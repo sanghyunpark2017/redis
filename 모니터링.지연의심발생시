@@ -14,10 +14,7 @@
 #콘솔실행(wasadm)
 rconsole
 
-#현재 latency 모니터링 값 확인
-config get latency-monitor-threshold
-
-#latency 모니터링 값을 0(사용안함)에서 100(밀리세컨드)로 변경 (단, 상황에 따라 낮추거나 늘릴 것)
+#latency 모니터 임계치 하향조정(현재는 1000(1초)로 임계최 초가 이벤트 기록을 거의 하지 않게 해둠)
 config set latency-monitor-threshold 100
 
 #latency  변경 확인
@@ -49,13 +46,6 @@ latency doctor
 #지금까지 기록된 이벤트 삭제
 latency reset
 
-#latency monitoring 비활성
-config set latency-monitor-threshold 0
-
-#latency monitoring 비활성 확인
-config get latency-monitor-threshold
-
-
-
-
+#latency monitoring 임계치 원복(1초)
+config set latency-monitor-threshold 1000
 

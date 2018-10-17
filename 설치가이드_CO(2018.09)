@@ -269,6 +269,7 @@ cat << EOF >> /root/.bash_profile
 # Redis port 7000
 alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf'
 alias rstop='redis-cli -p 7000 shutdown'
+alias rstopsave='redis-cli -p 7000 shutdown save'
 alias rconsole='redis-cli -c -p 7000'
 alias rlconsole='redis-cli -p 7000'
 alias rclsinfo='echo "cluster info" | redis-cli -c -p 7000'

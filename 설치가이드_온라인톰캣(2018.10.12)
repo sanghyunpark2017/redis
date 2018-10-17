@@ -27,7 +27,7 @@ port 7000
 tcp-backlog 65535
 timeout 0
 tcp-keepalive 300
-daemonize no
+daemonize yes
 supervised no
 pidfile /var/run/redis_7000.pid
 #loglevel verbose
@@ -259,7 +259,8 @@ su - wasadm
 
 cat << EOF >> /home/wasadm/.bash_profile
 # Redis port 7000
-alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
+#alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
+alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf'
 alias rstop='redis-cli -p 7000 shutdown'
 alias rconsole='redis-cli -c -p 7000'
 alias rlconsole='redis-cli -p 7000'

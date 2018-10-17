@@ -1,6 +1,7 @@
 ############################################
 # Note
 #############################################
+-root로 설치한다. 그 후에 wasadm으로 변경한다.
 -마스터와 슬레이드 수동으로 추가
 -마스터는 최소 3대, 과반수가 동작해야 하므로 마스터 댓수는 3대->5대->7대 등으로 scaleout이 유리
 -전체 서버 동시 재가동시 직전 마스터 서버 3대 중 2대를 먼저 가동시켜야 cluster working함 (평소 관리 필요)
@@ -170,7 +171,7 @@ port 7000
 tcp-backlog 65535
 timeout 0
 tcp-keepalive 300
-daemonize no
+daemonize yes
 supervised no
 pidfile /var/run/redis_7000.pid
 #loglevel verbose
@@ -266,7 +267,7 @@ cluster-slave-validity-factor 0   master와 slave 간 교신단절이 오래�
 ------------------------------------------------------------------------------------------------------------------
 cat << EOF >> /root/.bash_profile
 # Redis port 7000
-alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf &'
+alias rstart='redis-server /app/redis/redis-stable/conf/redis.conf'
 alias rstop='redis-cli -p 7000 shutdown'
 alias rconsole='redis-cli -c -p 7000'
 alias rlconsole='redis-cli -p 7000'

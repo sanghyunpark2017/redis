@@ -1,4 +1,3 @@
-
 ############################################
 # OS Setting
 #############################################
@@ -237,6 +236,69 @@ crontab -e
 
 ------------------------------------------------------------------
 
+############################################
+# 서비스 계정 생성
+############################################
+
+
+groupadd -g 502 alan
+useradd -g 502 -u 505 alan
+passwd alan
+
+
+
+#alan계정 alais 등록
+cat << EOF >> /home/alan/.bash_profile
+alias rconsole='redis-cli -c -p 7002'
+alias rlconsole='redis-cli -p 7002'
+alias rclsinfo='echo "cluster info" | redis-cli -c -p 7002'
+alias rclsnodes='echo "cluster nodes" | redis-cli -c -p 7002'
+alias rkeyspace='echo "info keyspace" | redis-cli -c -p 7002'
+EOF
+source /home/alan/.bash_profile
+
+
+
+
+
+
+
+############################################
+# sudo 및 group 
+############################################
+
+vi /etc/sudoers
+----------------------------------------------------------------------------
+##### Redis #####
+alan    ALL=NOPASSWD:/usr/bin/systemctl start redis
+alan    ALL=NOPASSWD:/usr/bin/systemctl restart redis
+alan    ALL=NOPASSWD:/usr/bin/systemctl status redis
+alan    ALL=NOPASSWD:/usr/bin/systemctl stop redis
+----------------------------------------------------------------------------
+
+
+vi /etc/group
+----------------------------------------------------------------------------
+redis:x:500:alan
+alan:x:502:
+----------------------------------------------------------------------------
+
+#sudo 검증
+su - alan
+
+sudo systemctl stop redis
+sleep 1
+sudo systemctl start redis
+sleep 1
+sudo systemctl status redis
+sleep 1
+sudo systemctl restart redis
+sleep 1
+sudo systemctl status redis
+
+
+cat  /var/log/redis/redis.log
+
 
 
 ############################################
@@ -247,7 +309,6 @@ crontab -e
 #설정파일 : /etc/redis.conf
 #데이터베이스 위치 : /app/redis/database
 #RDBMS 이름 : dump.rdb
-
 
 
 

@@ -1,1 +1,257 @@
-#
+
+############################################
+# OS Setting
+#############################################
+
+#(PASS)SELINUX disabled
+sed -i "s/SELINUX=enforcing/SELINUX=disabled/g" /etc/selinux/config
+cat  /etc/selinux/config
+
+
+#(PASS)방화벽 disable(app ip 확정되면 정책적용 & enabe)
+systemctl stop firewalld
+systemctl disable firewalld
+
+
+#(PASS)패러미터 조정
+cat << EOF >> /etc/security/limits.conf
+*          soft    nofile          65536
+*          hard    nofile          65536
+EOF
+
+cat << EOF >> /etc/rc.local
+echo never > /sys/kernel/mm/transparent_hugepage/enabled
+EOF
+chmod +x /etc/rc.d/rc.local
+
+
+cat << EOF >> /etc/sysctl.conf
+net.core.somaxconn = 65535
+vm.overcommit_memory = 1
+EOF
+
+
+#기존에 net.core.somaxconn = 2048은 삭제할 것
+vi /etc/sysctl.conf
+
+
+
+#재부팅하여 설정반영
+shutdown -r now
+
+#리붓 후 tcp backlog 65535 적용 확인
+sysctl net.core.somaxconn
+
+
+############################################
+# 최신버전의 redis yum 설치
+#############################################
+#검색 redis latest yum install 하여 최신 stable 버전을 yum 으로 설치하는 가이드 찾음
+sudo yum -y install http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+sudo yum --enablerepo=remi install -y redis
+rpm -qi redis
+
+
+
+#원래 파일 백업
+cp /etc/redis.conf /etc/redis.conf.org
+
+#rdbms 파일 저장위치 만들고
+mkdir -p /app/redis/database
+chown redis:redis -R /app/redis
+ll /app/redis
+
+
+
+#초기 설정
+(root)
+
+cat << EOF > /etc/redis.conf
+bind 0.0.0.0
+protected-mode yes
+port 7002
+#tcp-backlog 511
+tcp-backlog 65535
+timeout 0
+tcp-keepalive 300f
+daemonize no
+supervised no
+pidfile /var/run/redis_6379.pid
+#loglevel notice
+loglevel verbose
+logfile /var/log/redis/redis.log
+databases 16
+always-show-logo yes
+save 900 1
+save 300 10
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+dbfilename dump.rdb
+#dir /var/lib/redis
+dir /app/redis/database
+replica-serve-stale-data yes
+replica-read-only yes
+repl-diskless-sync no
+repl-diskless-sync-delay 5
+repl-disable-tcp-nodelay no
+replica-priority 100
+lazyfree-lazy-eviction no
+lazyfree-lazy-expire no
+lazyfree-lazy-server-del no
+replica-lazy-flush no
+appendonly no
+appendfilename "appendonly.aof"
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+aof-load-truncated yes
+aof-use-rdb-preamble yes
+lua-time-limit 5000
+slowlog-log-slower-than 10000
+slowlog-max-len 128
+latency-monitor-threshold 0
+notify-keyspace-events ""
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+list-max-ziplist-size -2
+list-compress-depth 0
+set-max-intset-entries 512
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+hll-sparse-max-bytes 3000
+stream-node-max-bytes 4096
+stream-node-max-entries 100
+activerehashing yes
+client-output-buffer-limit normal 0 0 0
+client-output-buffer-limit replica 256mb 64mb 60
+client-output-buffer-limit pubsub 32mb 8mb 60
+hz 10
+dynamic-hz yes
+aof-rewrite-incremental-fsync yes
+rdb-save-incremental-fsync yes
+cluster-enabled yes
+cluster-node-timeout 5000
+cluster-require-full-coverage no
+cluster-slave-validity-factor 0
+EOF
+
+
+
+systemctl enable redis
+systemctl stop redis
+systemctl start redis
+systemctl status redis
+
+
+
+
+#########################
+# 클러스터 구성
+#########################
+
+
+#(1번서버) Redis Cluster 생성(마스터 3대)
+redis-cli --cluster create 10.10.23.43:7002 10.10.23.44:7002 10.10.23.45:7002
+
+
+
+[alan@K1VCOSRDSAPP01 ~]$ redis-cli --cluster create 10.10.23.43:7002 10.10.23.44:7002 10.10.23.45:7002
+>>> Performing hash slots allocation on 3 nodes...
+Master[0] -> Slots 0 - 5460
+Master[1] -> Slots 5461 - 10922
+Master[2] -> Slots 10923 - 16383
+M: 56b1bd9c853bd122fd3fe5c162b9959d823bf984 10.10.23.43:7002
+   slots:[0-5460] (5461 slots) master
+M: 702c1af0e31e7c5f1621f14a11d688a60d228e2c 10.10.23.44:7002
+   slots:[5461-10922] (5462 slots) master
+M: 45504c8de70b266ba4888ef7ef34069466b1f21b 10.10.23.45:7002
+   slots:[10923-16383] (5461 slots) master
+Can I set the above configuration? (type 'yes' to accept): yes
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+Waiting for the cluster to join
+.
+>>> Performing Cluster Check (using node 10.10.23.43:7002)
+M: 56b1bd9c853bd122fd3fe5c162b9959d823bf984 10.10.23.43:7002
+   slots:[0-5460] (5461 slots) master
+M: 45504c8de70b266ba4888ef7ef34069466b1f21b 10.10.23.45:7002
+   slots:[10923-16383] (5461 slots) master
+M: 702c1af0e31e7c5f1621f14a11d688a60d228e2c 10.10.23.44:7002
+   slots:[5461-10922] (5462 slots) master
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+
+
+
+#(1번서버)앞서 만든 클러스터(마스터 3대)에 SALVE 3대를 추가한다.
+#(주의)IP순서가 아님, cluster-master-id는 해당 마스터서버의 ID를 위에서 가져옴
+
+redis-cli --cluster add-node 10.10.23.46:7002 10.10.23.43:7002 --cluster-slave --cluster-master-id 56b1bd9c853bd122fd3fe5c162b9959d823bf984
+
+redis-cli --cluster add-node 10.10.23.47:7002 10.10.23.44:7002 --cluster-slave --cluster-master-id 702c1af0e31e7c5f1621f14a11d688a60d228e2c
+
+redis-cli --cluster add-node 10.10.23.48:7002 10.10.23.45:7002 --cluster-slave --cluster-master-id 45504c8de70b266ba4888ef7ef34069466b1f21b
+
+
+#root계정 alais 등록
+cat << EOF >> /root/.bash_profile
+alias rconsole='redis-cli -c -p 7002'
+alias rlconsole='redis-cli -p 7002'
+alias rclsinfo='echo "cluster info" | redis-cli -c -p 7002'
+alias rclsnodes='echo "cluster nodes" | redis-cli -c -p 7002'
+alias rkeyspace='echo "info keyspace" | redis-cli -c -p 7002'
+
+systemctl status redis
+EOF
+source /root/.bash_profile
+
+
+
+
+############################################
+# OS 스케쥴 등록
+############################################
+
+(root)
+mkdir -p /root/cronjobs && cd /root/cronjobs
+
+cat << EOF > /root/cronjobs/flush_redis_log.sh
+#!/bin/sh
+echo > /var/log/redis/redis.log
+EOF
+
+chmod 755 /root/cronjobs/flush_redis_log.sh
+ll
+
+
+crontab -e
+------------------------------------------------------------------
+###flush redis log
+0 0 * * * /root/cronjobs/flush_redis_log.sh
+
+------------------------------------------------------------------
+
+
+
+############################################
+# 구성요약
+############################################
+
+
+#설정파일 : /etc/redis.conf
+#데이터베이스 위치 : /app/redis/database
+#RDBMS 이름 : dump.rdb
+
+
+
+
+
+
+
+
